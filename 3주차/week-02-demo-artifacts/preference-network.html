@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preference network</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #171717;
+      --muted: #6b6b6b;
+      --line: #d9d9d9;
+      --wash: #f6f6f4;
+      --paper: #ffffff;
+      --accent: #1a0089;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    button, select { font: inherit; }
+
+    .page {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 40px 48px 52px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 28px;
+      align-items: end;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: 20px;
+    }
+
+    h1, h2, p { margin: 0; }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 4.4rem);
+      font-weight: 500;
+      letter-spacing: -0.065em;
+      line-height: 0.92;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: end;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 0.83rem;
+    }
+
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .line-sample { width: 26px; height: 0; border-top: 1px solid var(--ink); }
+    .node-sample {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1px;
+      margin: 24px 0;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+
+    .metric { background: var(--paper); padding: 14px 16px 16px; }
+    .metric-label { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .metric-value { display: block; margin-top: 5px; font-size: 1.65rem; line-height: 1; font-variant-numeric: tabular-nums; }
+
+    .controls {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin: 0 0 14px;
+    }
+
+    .control-group { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+    label { display: grid; gap: 5px; color: var(--muted); font-size: 0.78rem; }
+    select, button {
+      min-height: 36px;
+      border: 1px solid var(--ink);
+      border-radius: 0;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    button:hover, select:hover { background: var(--wash); }
+    .hint { color: var(--muted); font-size: 0.82rem; }
+
+    .main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 290px;
+      min-height: 680px;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .graph-wrap { position: relative; min-height: 680px; }
+    svg { display: block; width: 100%; height: 680px; touch-action: none; }
+    .edge { fill: none; stroke: var(--ink); stroke-opacity: 0.34; stroke-width: 1.2; }
+    .node { cursor: grab; stroke: var(--paper); stroke-width: 2.4; }
+    .node:active { cursor: grabbing; }
+    .node.selected { stroke: var(--ink); stroke-width: 3.3; }
+    .is-faded { opacity: 0.09; }
+
+    .tooltip {
+      position: absolute;
+      z-index: 3;
+      pointer-events: none;
+      display: none;
+      padding: 8px 10px;
+      background: var(--ink);
+      color: var(--paper);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    aside {
+      border-left: 1px solid var(--ink);
+      padding: 22px 20px;
+      background: var(--wash);
+    }
+    aside h2 { font-size: 1.1rem; font-weight: 500; letter-spacing: -0.02em; }
+    .empty { margin-top: 14px; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
+    .detail { display: grid; gap: 18px; margin-top: 18px; }
+    .detail-name { font-size: 1.55rem; letter-spacing: -0.04em; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .detail-grid div { background: var(--wash); padding: 10px; }
+    .detail-grid span { display: block; color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .detail-grid strong { display: block; margin-top: 4px; font-size: 1.2rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+    .detail-block { border-top: 1px solid var(--line); padding-top: 12px; }
+    .detail-block h3 { margin: 0 0 6px; color: var(--muted); font-size: 0.72rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+    .detail-block p { font-size: 0.9rem; line-height: 1.5; }
+
+    @media (max-width: 860px) {
+      .page { padding: 24px 20px 32px; }
+      header { display: block; }
+      .legend { justify-content: start; margin-top: 20px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .main { grid-template-columns: 1fr; }
+      .graph-wrap, svg { min-height: 560px; height: 560px; }
+      aside { border-left: 0; border-top: 1px solid var(--ink); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Preference network</h1>
+      <div class="legend" aria-label="Graph legend">
+        <span><i class="node-sample" aria-hidden="true"></i>node size: in-degree</span>
+        <span><i class="line-sample" aria-hidden="true"></i>request</span>
+      </div>
+    </header>
+
+    <section class="metrics" aria-label="Network summary">
+      <div class="metric"><span class="metric-label">Students</span><strong class="metric-value" id="metric-nodes"></strong></div>
+      <div class="metric"><span class="metric-label">Requests</span><strong class="metric-value" id="metric-edges"></strong></div>
+      <div class="metric"><span class="metric-label">Density</span><strong class="metric-value" id="metric-density"></strong></div>
+      <div class="metric"><span class="metric-label">Reciprocity</span><strong class="metric-value" id="metric-reciprocity"></strong></div>
+      <div class="metric"><span class="metric-label">Components</span><strong class="metric-value" id="metric-components"></strong></div>
+    </section>
+
+    <section class="controls" aria-label="Graph controls">
+      <div class="control-group">
+        <label for="component-select">Focus component
+          <select id="component-select"></select>
+        </label>
+        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+        <button type="button" id="reset-layout">Reset view &amp; layout</button>
+      </div>
+      <p class="hint">Scroll to zoom. Drag empty space to pan. Drag a node to inspect it.</p>
+    </section>
+
+    <section class="main">
+      <div class="graph-wrap" id="graph-wrap">
+        <svg id="network" role="img" aria-label="Directed student preference network"></svg>
+        <div class="tooltip" id="tooltip" role="status"></div>
+      </div>
+      <aside aria-live="polite">
+        <h2>Selected student</h2>
+        <p class="empty" id="empty-state">Select a node to see its requests, incoming connections, and stated preference.</p>
+        <div class="detail" id="detail" hidden></div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const GRAPH_DATA = {"students":[{"name":"정현창","responded":true,"preferredSize":4,"preferredPeers":[]},{"name":"김문건","responded":true,"preferredSize":3,"preferredPeers":[]},{"name":"최현호","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"이승욱","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"유철민","responded":true,"preferredSize":3,"preferredPeers":[]},{"name":"박경민","responded":true,"preferredSize":3,"preferredPeers":["김태윤"]},{"name":"김민섭","responded":true,"preferredSize":3,"preferredPeers":["전연우"]},{"name":"정정비","responded":true,"preferredSize":4,"preferredPeers":[]},{"name":"김태윤","responded":true,"preferredSize":3,"preferredPeers":["박경민"]},{"name":"방우민","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"은동관","responded":true,"preferredSize":2,"preferredPeers":[]},{"name":"HAN XIAO","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"XUE HAOYANG","responded":true,"preferredSize":4,"preferredPeers":["HAN XIAO"]},{"name":"어영현","responded":true,"preferredSize":4,"preferredPeers":["엄현준","신희상"]},{"name":"홍준성","responded":true,"preferredSize":2,"preferredPeers":["장선규"]},{"name":"엄현준","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"한정빈","responded":true,"preferredSize":3,"preferredPeers":[]},{"name":"정채원","responded":true,"preferredSize":3,"preferredPeers":["장선규"]},{"name":"이문영","responded":true,"preferredSize":4,"preferredPeers":["신희상","엄현준","어영현"]},{"name":"이수민","responded":true,"preferredSize":3,"preferredPeers":["박현정"]},{"name":"신희상","responded":true,"preferredSize":4,"preferredPeers":["어영현","엄현준","이문영"]},{"name":"장선규","responded":true,"preferredSize":4,"preferredPeers":["홍준성","정채원"]},{"name":"유채원","responded":true,"preferredSize":4,"preferredPeers":["강수림","권민지","이현아"]},{"name":"홍아영","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"권민지","responded":true,"preferredSize":4,"preferredPeers":["강수림","유채원","김민"]},{"name":"강수림","responded":true,"preferredSize":3,"preferredPeers":["유채원","권민지"]},{"name":"김민","responded":true,"preferredSize":4,"preferredPeers":["권민지"]},{"name":"배고성","responded":true,"preferredSize":4,"preferredPeers":["이호윤"]},{"name":"이호윤","responded":true,"preferredSize":3,"preferredPeers":["배고성"]},{"name":"이현아","responded":true,"preferredSize":4,"preferredPeers":["유채원","강수림"]},{"name":"남기헌","responded":true,"preferredSize":2,"preferredPeers":["이광무"]},{"name":"이광무","responded":true,"preferredSize":2,"preferredPeers":["남기헌"]},{"name":"박현정","responded":true,"preferredSize":2,"preferredPeers":["고예진"]},{"name":"고예진","responded":true,"preferredSize":2,"preferredPeers":["박현정"]},{"name":"임예서","responded":true,"preferredSize":4,"preferredPeers":["전연우","박현정"]},{"name":"전연우","responded":true,"preferredSize":4,"preferredPeers":["임예서","김민섭"]},{"name":"전성희","responded":false,"preferredSize":null,"preferredPeers":[]},{"name":"조수아","responded":true,"preferredSize":4,"preferredPeers":["장예지","박주원","이승현"]},{"name":"이원영","responded":true,"preferredSize":3,"preferredPeers":["신운호","홍은기"]},{"name":"진채연","responded":true,"preferredSize":3,"preferredPeers":[]},{"name":"신운호","responded":true,"preferredSize":3,"preferredPeers":["이원영","홍은기"]},{"name":"박주원","responded":true,"preferredSize":4,"preferredPeers":["조수아","장예지","진채연"]},{"name":"이승현","responded":true,"preferredSize":4,"preferredPeers":["박주원","장예지","조수아"]},{"name":"장예지","responded":true,"preferredSize":4,"preferredPeers":["조수아","이승현","박주원"]},{"name":"홍은기","responded":true,"preferredSize":3,"preferredPeers":["신운호","이원영"]}],"edges":[{"source":"박경민","target":"김태윤"},{"source":"김민섭","target":"전연우"},{"source":"김태윤","target":"박경민"},{"source":"XUE HAOYANG","target":"HAN XIAO"},{"source":"어영현","target":"엄현준"},{"source":"어영현","target":"신희상"},{"source":"홍준성","target":"장선규"},{"source":"정채원","target":"장선규"},{"source":"이문영","target":"신희상"},{"source":"이문영","target":"엄현준"},{"source":"이문영","target":"어영현"},{"source":"이수민","target":"박현정"},{"source":"신희상","target":"어영현"},{"source":"신희상","target":"엄현준"},{"source":"신희상","target":"이문영"},{"source":"장선규","target":"홍준성"},{"source":"장선규","target":"정채원"},{"source":"유채원","target":"강수림"},{"source":"유채원","target":"권민지"},{"source":"유채원","target":"이현아"},{"source":"권민지","target":"강수림"},{"source":"권민지","target":"유채원"},{"source":"권민지","target":"김민"},{"source":"강수림","target":"유채원"},{"source":"강수림","target":"권민지"},{"source":"김민","target":"권민지"},{"source":"배고성","target":"이호윤"},{"source":"이호윤","target":"배고성"},{"source":"이현아","target":"유채원"},{"source":"이현아","target":"강수림"},{"source":"남기헌","target":"이광무"},{"source":"이광무","target":"남기헌"},{"source":"박현정","target":"고예진"},{"source":"고예진","target":"박현정"},{"source":"임예서","target":"전연우"},{"source":"임예서","target":"박현정"},{"source":"전연우","target":"임예서"},{"source":"전연우","target":"김민섭"},{"source":"조수아","target":"장예지"},{"source":"조수아","target":"박주원"},{"source":"조수아","target":"이승현"},{"source":"이원영","target":"신운호"},{"source":"이원영","target":"홍은기"},{"source":"신운호","target":"이원영"},{"source":"신운호","target":"홍은기"},{"source":"박주원","target":"조수아"},{"source":"박주원","target":"장예지"},{"source":"박주원","target":"진채연"},{"source":"이승현","target":"박주원"},{"source":"이승현","target":"장예지"},{"source":"이승현","target":"조수아"},{"source":"장예지","target":"조수아"},{"source":"장예지","target":"이승현"},{"source":"장예지","target":"박주원"},{"source":"홍은기","target":"신운호"},{"source":"홍은기","target":"이원영"}]};
+
+    const nodes = GRAPH_DATA.students.map(student => ({ ...student }));
+    const nodeByName = new Map(nodes.map(node => [node.name, node]));
+    const directedPairs = new Set(
+      GRAPH_DATA.edges.map(edge => `${edge.source}\u0000${edge.target}`)
+    );
+
+    function componentData() {
+      const parent = new Map(nodes.map(node => [node.name, node.name]));
+      const find = name => {
+        if (parent.get(name) !== name) parent.set(name, find(parent.get(name)));
+        return parent.get(name);
+      };
+      const join = (a, b) => {
+        const rootA = find(a);
+        const rootB = find(b);
+        if (rootA !== rootB) parent.set(rootB, rootA);
+      };
+      GRAPH_DATA.edges.forEach(edge => join(edge.source, edge.target));
+      const grouped = d3.group(nodes, node => find(node.name));
+      return [...grouped.values()]
+        .sort((a, b) => d3.descending(a.length, b.length))
+        .map((members, index) => ({ id: index + 1, members }));
+    }
+
+    const components = componentData();
+    const componentColor = new Map(
+      components.map((component, index) => [
+        component.id,
+        d3.interpolateRainbow((index + 0.5) / components.length),
+      ])
+    );
+    components.forEach(component => {
+      component.members.forEach(node => {
+        node.component = component.id;
+        node.componentSize = component.members.length;
+      });
+    });
+
+    nodes.forEach(node => {
+      node.inDegree = GRAPH_DATA.edges.filter(edge => edge.target === node.name).length;
+      node.outDegree = GRAPH_DATA.edges.filter(edge => edge.source === node.name).length;
+      node.mutualPeers = GRAPH_DATA.edges
+        .filter(edge => edge.source === node.name)
+        .map(edge => edge.target)
+        .filter(target => directedPairs.has(`${target}\u0000${node.name}`));
+    });
+
+    const displayEdges = GRAPH_DATA.edges.map(edge => ({
+      ...edge,
+      source: nodeByName.get(edge.source),
+      target: nodeByName.get(edge.target),
+      mutual: directedPairs.has(`${edge.target}\u0000${edge.source}`),
+    }));
+    const layoutLinks = [...new Map(
+      displayEdges.map(edge => {
+        const key = [edge.source.name, edge.target.name].sort().join('\u0000');
+        return [key, { source: edge.source.name, target: edge.target.name }];
+      })
+    ).values()];
+
+    const reciprocalEdges = displayEdges.filter(edge => edge.mutual).length;
+    const density = displayEdges.length / (nodes.length * (nodes.length - 1));
+    d3.select('#metric-nodes').text(nodes.length);
+    d3.select('#metric-edges').text(displayEdges.length);
+    d3.select('#metric-density').text(d3.format('.1%')(density));
+    d3.select('#metric-reciprocity').text(d3.format('.0%')(reciprocalEdges / displayEdges.length));
+    d3.select('#metric-components').text(components.length);
+
+    const componentSelect = d3.select('#component-select');
+    componentSelect.append('option').attr('value', 'all').text('All components');
+    components.forEach(component => {
+      componentSelect.append('option')
+        .attr('value', component.id)
+        .text(`Component ${component.id} (${component.members.length})`);
+    });
+
+    const graphWrap = document.getElementById('graph-wrap');
+    const svg = d3.select('#network');
+    const tooltip = d3.select('#tooltip');
+    const detail = d3.select('#detail');
+    const emptyState = d3.select('#empty-state');
+    let width = graphWrap.clientWidth;
+    let height = graphWrap.clientHeight;
+    let selectedNode = null;
+    let focusedComponent = 'all';
+
+    svg.attr('viewBox', `0 0 ${width} ${height}`);
+    const defs = svg.append('defs');
+    defs.append('marker')
+      .attr('id', 'arrow')
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 13)
+      .attr('refY', 0)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('fill', '#171717')
+      .attr('d', 'M0,-5L10,0L0,5');
+
+    const graph = svg.append('g');
+    const edgeLayer = graph.append('g').attr('aria-hidden', 'true');
+    const nodeLayer = graph.append('g');
+
+    const zoom = d3.zoom()
+      .scaleExtent([0.55, 3])
+      .filter(event => !event.button && !event.target.closest('.node'))
+      .on('zoom', event => graph.attr('transform', event.transform));
+
+    svg.call(zoom).on('dblclick.zoom', null);
+
+    const simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(layoutLinks).id(node => node.name).distance(92).strength(0.34))
+      .force('charge', d3.forceManyBody().strength(-250))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('x', d3.forceX(width / 2).strength(0.045))
+      .force('y', d3.forceY(height / 2).strength(0.045))
+      .force('collision', d3.forceCollide().radius(node => 13 + Math.sqrt(node.inDegree) * 3))
+      .stop();
+
+    const edgeSelection = edgeLayer.selectAll('path')
+      .data(displayEdges)
+      .join('path')
+      .attr('class', 'edge')
+      .attr('marker-end', 'url(#arrow)');
+
+    const nodeSelection = nodeLayer.selectAll('circle')
+      .data(nodes)
+      .join('circle')
+      .attr('class', 'node')
+      .attr('r', node => 7 + Math.sqrt(node.inDegree) * 3)
+      .attr('fill', node => componentColor.get(node.component))
+      .attr('tabindex', 0)
+      .attr('role', 'button')
+      .attr('aria-label', node => `${node.name}, ${node.inDegree} incoming requests, ${node.outDegree} outgoing requests`)
+      .on('mouseenter', showTooltip)
+      .on('mousemove', moveTooltip)
+      .on('mouseleave', hideTooltip)
+      .on('click', (event, node) => selectNode(node))
+      .on('keydown', (event, node) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectNode(node);
+        }
+      })
+      .call(d3.drag()
+        .on('start', dragStarted)
+        .on('drag', dragged)
+        .on('end', dragEnded));
+
+    function edgePath(edge) {
+      const source = edge.source;
+      const target = edge.target;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const radius = 7 + Math.sqrt(target.inDegree) * 3;
+      const endX = target.x - (dx / distance) * radius;
+      const endY = target.y - (dy / distance) * radius;
+      return `M${source.x},${source.y}L${endX},${endY}`;
+    }
+
+    function clampNode(node) {
+      const padding = 20 + Math.sqrt(node.inDegree) * 3;
+      node.x = Math.max(padding, Math.min(width - padding, node.x));
+      node.y = Math.max(padding, Math.min(height - padding, node.y));
+    }
+
+    function ticked() {
+      nodes.forEach(clampNode);
+      edgeSelection.attr('d', edgePath);
+      nodeSelection.attr('cx', node => node.x).attr('cy', node => node.y);
+    }
+
+    simulation.on('tick', ticked);
+    let initialLayout = new Map();
+
+    function settleLayout() {
+      simulation.stop().alpha(1);
+      for (let tick = 0; tick < 300; tick += 1) simulation.tick();
+      ticked();
+      initialLayout = new Map(nodes.map(node => [node.name, { x: node.x, y: node.y }]));
+    }
+
+    function showTooltip(event, node) {
+      tooltip
+        .style('display', 'block')
+        .html(`<strong>${node.name}</strong><br>incoming ${node.inDegree} · outgoing ${node.outDegree}`);
+      moveTooltip(event);
+    }
+
+    function moveTooltip(event) {
+      const bounds = graphWrap.getBoundingClientRect();
+      tooltip
+        .style('left', `${event.clientX - bounds.left + 12}px`)
+        .style('top', `${event.clientY - bounds.top + 12}px`);
+    }
+
+    function hideTooltip() { tooltip.style('display', 'none'); }
+
+    function selectNode(node) {
+      selectedNode = node;
+      nodeSelection.classed('selected', candidate => candidate === node);
+      emptyState.attr('hidden', true);
+      detail.attr('hidden', null).html(`
+        <p class="detail-name">${node.name}</p>
+        <div class="detail-grid">
+          <div><span>In-degree</span><strong>${node.inDegree}</strong></div>
+          <div><span>Out-degree</span><strong>${node.outDegree}</strong></div>
+          <div><span>Mutual peers</span><strong>${node.mutualPeers.length}</strong></div>
+          <div><span>Component</span><strong>${node.component}</strong></div>
+        </div>
+        <div class="detail-block">
+          <h3>Preferred group size</h3>
+          <p>${node.preferredSize ?? 'Not submitted'}</p>
+        </div>
+        <div class="detail-block">
+          <h3>Named classmates</h3>
+          <p>${node.preferredPeers.length ? node.preferredPeers.join(', ') : 'None recorded'}</p>
+        </div>
+        <div class="detail-block">
+          <h3>Mutual requests</h3>
+          <p>${node.mutualPeers.length ? node.mutualPeers.join(', ') : 'None'}</p>
+        </div>
+      `);
+    }
+
+    function applyComponentFocus() {
+      const active = focusedComponent === 'all' ? null : Number(focusedComponent);
+      nodeSelection.classed('is-faded', node => active !== null && node.component !== active);
+      edgeSelection.classed('is-faded', edge => active !== null && (
+        edge.source.component !== active || edge.target.component !== active
+      ));
+    }
+
+    componentSelect.on('change', event => {
+      focusedComponent = event.target.value;
+      applyComponentFocus();
+    });
+
+    function resetLayout() {
+      nodes.forEach(node => {
+        const position = initialLayout.get(node.name);
+        node.x = position.x;
+        node.y = position.y;
+        node.vx = 0;
+        node.vy = 0;
+        node.fx = null;
+        node.fy = null;
+      });
+      simulation.stop();
+      ticked();
+      svg.transition().duration(180).call(zoom.transform, d3.zoomIdentity);
+    }
+
+    d3.select('#reset-layout').on('click', resetLayout);
+    d3.select('#zoom-in').on('click', () => {
+      svg.transition().duration(180).call(zoom.scaleBy, 1.35);
+    });
+    d3.select('#zoom-out').on('click', () => {
+      svg.transition().duration(180).call(zoom.scaleBy, 1 / 1.35);
+    });
+
+    function dragStarted(event, node) {
+      if (!event.active) simulation.alphaTarget(0.24).restart();
+      node.fx = node.x;
+      node.fy = node.y;
+    }
+
+    function dragged(event, node) {
+      node.fx = Math.max(20, Math.min(width - 20, event.x));
+      node.fy = Math.max(20, Math.min(height - 20, event.y));
+    }
+
+    function dragEnded(event, node) {
+      if (!event.active) simulation.alphaTarget(0);
+      node.fx = null;
+      node.fy = null;
+    }
+
+    new ResizeObserver(entries => {
+      const box = entries[0].contentRect;
+      width = box.width;
+      height = box.height;
+      svg.attr('viewBox', `0 0 ${width} ${height}`);
+      simulation.force('center', d3.forceCenter(width / 2, height / 2));
+      simulation.force('x', d3.forceX(width / 2).strength(0.045));
+      simulation.force('y', d3.forceY(height / 2).strength(0.045));
+      settleLayout();
+    }).observe(graphWrap);
+  </script>
+</body>
+</html>
